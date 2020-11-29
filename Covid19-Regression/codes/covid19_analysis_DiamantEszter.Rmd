@@ -22,20 +22,14 @@ library(xtable)
 library(stargazer)
 library(knitr)
 ```
-
-## R Markdown
-
-To write: my research question
-To write: my variables
-To write: potential droppings and scaling
-
+## Introduction
+The aim of this analysis to identify linear regression between number of confirmed COVID-19 cases and death due to COVID-19. The main research question whether can be any regression model interpreted  that  determines which countries managed to save their people efficiently or not. The dataset contain data on countries, their population, the number of confirmed COVID-19 cases in the country, the number of death resulted from the infection, the number of recovered cases, and the number of currently active COVID-19 cases. Considering the high differences among the popuation, scaling was implemented during the analysis. Also, some extreme values were found such as Qatar and Singapore where high number of confirmed infection resulted in significantly lower number of death due to the quality of the healthcare system. However, because of the aim of the research question, these extreme values were kept. On the other hand, ue to errors in the regression analysis, those countries were droped where there were not deaths which might influence potential results.
 
 ## Summary statistics
-
-To write: 2-3 sentence about summary statistics
+The mean of the distribution is 25,6647 while the median is 21,523. It is already indicates a high skeweness that is more than 7 for confirmed covid cases and more than 6 for deaths, meaning a long right tail in both distribution.
 
 ```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE, out.width = "35%", fig.align =  "center"}
-my_path <- "C:/Users/diama/Documents/CEU-BA-Assignments/Coding1_DataAnalysis2/Covid19-Regression/data/"
+my_path <- "https://raw.githubusercontent.com/DiamantEszter97/Coding1-DA-Assigment1/master/Covid19-Regression/data/"
 df <- read.csv(paste0(my_path, "clean/covid_pop_11_02_2020_clean.csv"))
 rm(my_path)
 
@@ -73,6 +67,10 @@ rownames(xtb) <- c("Confirmed", "Death")
 print(xtb, comment = FALSE, include.rownames= TRUE)
 ```
 
+## Investigate the transfomration of variables:
+Considering the fact that the analysis used number of confirmed cases and number of deaths, significant transformation among he values did not occur. 
+
+
 ```{r, echo = FALSE}
 # remove where there are no deaths because it will result in defaults in the log analysis
 df <- df %>% filter(death != 0)
@@ -84,15 +82,8 @@ df <- df %>% mutate(log_conf = log(confirmed),
 
 ```
 
-## Investigation of variables:
-
-to write: substative reasoning (2-3), statistical reasoning
 
 ## Investigate different models:
-graphs at the appendix
-to write: what I can see in the charts
-to write: substative reasoning (2-3), statistical reasoning -> which one to use (in appendix the 2-3 sentence)
-
 Make the three models:
 
 1) level-level:
@@ -154,24 +145,37 @@ sum_8 <- summary(reg8)
 
 
 ```
-![Regression Models](C:/Users/diama/Documents/CEU-BA-Assignments/Coding1_DataAnalysis2/Covid19-Regression/out/Regression_models.JPG)
+
 
 
 
 ## Model choice
- write the appropiate equation 
- write: 2-3 sent, about interpretation
+log_death = 0.30 + 0.03 * log_conf
 
- 
+The model states that death 0.03% higher on average in a country, for observation with one percent higher confirmed cases. Based on model comparison our chosen model is reg4 - log_death ~ log_conf
+
+  Substantive: 
+  
+  - the log-log transformation gives the most fitting linear model
+  - the coefficients are meaningful
+
+  Statistical: 
+  
+  - the R^2 of reg4-6 exceeds the R^2 of the reg1-3. This means that those regrssion models capture the variables better
+  - it has one of the lowest p value compared to the other log regressions that indicates the lowest chance of false positive
+  - log-log transformation works better considering the high skewness
  
 ## Hypothesis testing:
+The hypothesis test whether the ß of chosen model can equal to zero:
 
-H0: log_conf = 0
-HA: log_conf != 0
+H0: ß = 0
+HA: ß != 0
 
-```{r, echo = FALSE , warning = FALSE, message = FALSE }
+Because the p-value is lower than 0.05 the null hypothesis, that ß=0,  can be rejected. 
 
-linearHypothesis( reg4 , "log_conf = 0")
+```{r, echo = FALSE , warning = FALSE, message = FALSE, out.width = "35%" }
+
+summary(reg4)
 
 
 ```
@@ -196,18 +200,25 @@ res_df_2 <- df %>% top_n( 5 , reg4_res ) %>%
 
 
 ```
+The residuals consider the distance of the actual value  from the predicted value. The lower the residual values indicates which countries lost relatively the most infected people while the highest residuals tell which ones saved the most.
+
 Countries that relatively saved the most people due to COVID-19:
 
 ```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE }
 kable(res_df)
 
 ```
+
 Countries that relatively lost the most people due to COVID-19:
 
 ```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE }
 kable(res_df_2)
 
 ```
+## Summary:
+
+Based on the above findings, the log number of deaths and log number of confirmed cases presents the most meaningful linear regression for estimation. It was determined that 0.03% higher on average in a country, for observation with one percent higher confirmed cases. Considering tha fact that the analysis excluded those countries that do not have any deaths it might affect the the regression model potentially. On the other hand, those countries, that were considered as extreme values for their significantly low deaths rates, would illustrate that better health care system do reduce the number of death even in pandemic.
+
 
 ## Appendix:
 
@@ -316,4 +327,14 @@ ggplot(df, aes(x = log_conf, y = log_death)) +
   geom_smooth(aes(weight = population), method = lm, color = "red")
 
 ```
+
+chart 11: Model comparisons
+
+![Regression Models](C:/Users/diama/Documents/CEU-BA-Assignments/Coding1_DataAnalysis2/Covid19-Regression/out/Regression_models.jpg)
+
+```{r}
+```
+
+## Github repository:
+[Github](https://github.com/DiamantEszter97/Coding1-DA-Assigment1/tree/master/Covid19-Regression)
 
