@@ -67,9 +67,9 @@ code span.ot { color: #007020; }
 
 
 <section class="main-content">
-<div id="r-markdown" class="section level2">
-<h2>R Markdown</h2>
-<p>The aim of this analysis to identify linear regression between number of confirmed COVID-19 cases and death due to COVID-19. The main research question whether the correlation is high or low and by this it can be determine which countries managed to save their people efficiently or not. The dataset contain data on countries, their population, the number of confirmed COVID-19 cases in the country, the number of death resulted from the infection, the number of recovered cases, and the number of currently active COVID-19 cases. Considering the high differences among the popuation, scaling was implemented during the analysis. Also, some extreme values were found such as Qatar and Singapore where high number of confirmed infection resulted in significantly lower number of death due to the quality of the healthcare system. However, because of the aim of the research question, these extreme values were kept. On the other hand, ue to errors in the regression analysis, those countries were droped where there were not deaths which might influence potential results.</p>
+<div id="introduction" class="section level2">
+<h2>Introduction</h2>
+<p>The aim of this analysis to identify linear regression between number of confirmed COVID-19 cases and death due to COVID-19. The main research question whether can be any regression model interpreted that determines which countries managed to save their people efficiently or not. The dataset contain data on countries, their population, the number of confirmed COVID-19 cases in the country, the number of death resulted from the infection, the number of recovered cases, and the number of currently active COVID-19 cases. Considering the high differences among the popuation, scaling was implemented during the analysis. Also, some extreme values were found such as Qatar and Singapore where high number of confirmed infection resulted in significantly lower number of death due to the quality of the healthcare system. However, because of the aim of the research question, these extreme values were kept. On the other hand, ue to errors in the regression analysis, those countries were droped where there were not deaths which might influence potential results.</p>
 </div>
 <div id="summary-statistics" class="section level2">
 <h2>Summary statistics</h2>
@@ -101,10 +101,18 @@ code span.ot { color: #007020; }
 <div id="model-choice" class="section level2">
 <h2>Model choice</h2>
 <p>log_death = 0.30 + 0.03 * log_conf</p>
-<p>The model states that death 0.03% higher on average in a country, for observation with one percent higher confirmed cases.</p>
-<p>Based on model comparison our chosen model is reg4 - log_death ~ log_conf</p>
-<p>Substantive: - the log-log transformation gives the most fitting linear model - the coefficients are meaningful</p>
-<p>Statistical: - the R^2 of reg4-6 exceeds the R^2 of the reg1-3 -&gt; capture the variables well - it has one of the lowest p value compared to the other log regressions that indicates the lowest chance of false positive - log-log transformation works better considering the high skewness</p>
+<p>The model states that death 0.03% higher on average in a country, for observation with one percent higher confirmed cases. Based on model comparison our chosen model is reg4 - log_death ~ log_conf</p>
+<p>Substantive:</p>
+<ul>
+<li>the log-log transformation gives the most fitting linear model</li>
+<li>the coefficients are meaningful</li>
+</ul>
+<p>Statistical:</p>
+<ul>
+<li>the R^2 of reg4-6 exceeds the R^2 of the reg1-3. This means that those regrssion models capture the variables better</li>
+<li>it has one of the lowest p value compared to the other log regressions that indicates the lowest chance of false positive</li>
+<li>log-log transformation works better considering the high skewness</li>
+</ul>
 </div>
 <div id="hypothesis-testing" class="section level2">
 <h2>Hypothesis testing:</h2>
@@ -214,6 +222,10 @@ code span.ot { color: #007020; }
 </tr>
 </tbody>
 </table>
+</div>
+<div id="summary" class="section level2">
+<h2>Summary:</h2>
+<p>Based on the above findings, the log number of deaths and log number of confirmed cases presents the most meaningful linear regression for estimation. It was determined that 0.03% higher on average in a country, for observation with one percent higher confirmed cases. Considering tha fact that the analysis excluded those countries that do not have any deaths it might affect the the regression model potentially. On the other hand, those countries, that were considered as extreme values for their significantly low deaths rates, would illustrate that better health care system do reduce the number of death even in pandemic.</p>
 </div>
 <div id="appendix" class="section level2">
 <h2>Appendix:</h2>
