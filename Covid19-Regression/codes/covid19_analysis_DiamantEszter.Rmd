@@ -1,0 +1,319 @@
+---
+title: "Regression Analysis"
+author: "Eszter Diamant"
+date: '2020 11 29 '
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list=ls())
+
+library(tidyverse)
+library(scales)
+library(lspline)
+library(estimatr)
+library(texreg)
+library(ggthemes)
+library(moments)
+library(readxl)
+library(car)
+library(xtable)
+library(stargazer)
+library(knitr)
+```
+
+## R Markdown
+
+To write: my research question
+To write: my variables
+To write: potential droppings and scaling
+
+
+## Summary statistics
+
+To write: 2-3 sentence about summary statistics
+
+```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE, out.width = "35%", fig.align =  "center"}
+my_path <- "C:/Users/diama/Documents/CEU-BA-Assignments/Coding1_DataAnalysis2/Covid19-Regression/data/"
+df <- read.csv(paste0(my_path, "clean/covid_pop_11_02_2020_clean.csv"))
+rm(my_path)
+
+df %>%
+  keep(is.numeric) %>% 
+  gather() %>% 
+  ggplot(aes(value)) +
+  facet_wrap(~key, scales = "free") +
+  geom_histogram()+
+  theme_wsj() + 
+  scale_fill_wsj()
+
+
+df_conf_sum <- df %>% summarise(min = min(confirmed),
+                           max = max(confirmed),
+                           mean = mean(confirmed),
+                           median = median(confirmed),
+                           sd = sd(confirmed),
+                           skew = skewness(confirmed),
+                           iq_range = IQR(confirmed))
+
+df_death_sum <- df %>% summarise(min = min(death),
+                                 max = max(death),
+                                 mean = mean(death),
+                                 median = median(death),
+                                 sd = sd(death),
+                                 skew = skewness(death),
+                                 iq_range = IQR(death))
+
+df_summary <- df_conf_sum %>%  add_row(df_death_sum)
+
+xtb <- xtable(df_summary, type = latex, caption = "Summary statistics for the confimred COVID-19 cases and death resulted due to the infection")
+
+rownames(xtb) <- c("Confirmed", "Death")
+print(xtb, comment = FALSE, include.rownames= TRUE)
+```
+
+```{r, echo = FALSE}
+# remove where there are no deaths because it will result in defaults in the log analysis
+df <- df %>% filter(death != 0)
+
+# take log of number of deaths and number of confirmed cases
+df <- df %>% mutate(log_conf = log(confirmed),
+                    log_death = log(death))
+
+
+```
+
+## Investigation of variables:
+
+to write: substative reasoning (2-3), statistical reasoning
+
+## Investigate different models:
+graphs at the appendix
+to write: what I can see in the charts
+to write: substative reasoning (2-3), statistical reasoning -> which one to use (in appendix the 2-3 sentence)
+
+Make the three models:
+
+1) level-level:
+
+          (chart 1): reg1: death = alpha + beta * confirmed
+          (chart 5): reg2: death = alpha + beta_1 * confirmed + beta_2 * confirmed^2
+          (chart 6): reg3: death = alpha + beta_1 * confirmed + beta_2 * confirmed^2 + beta_3 * confirmed^3
+
+ 2) log -log:
+ 
+          (chart 4): reg4: log_death = alpha + beta * log_conf
+          (chart 7): reg5: log_death = alpha + beta_1 * log_conf + beta_2 * log_conf^2
+          (chart 8): reg6: log_death = alpha + beta_1 * log_conf + beta_2 * log_conf^2 + beta_3 * log_conf^3
+          (chart 9): reg7: log_death = alpha + beta_1 * log_conf * 1(log_conf < 7) + beta_2 * log_conf * 1(log_conf >= 7)
+
+ 3) extra: weighted-ols:
+ 
+          chart 10): reg8: log_death = alpha + beta* log_conf, weights: population
+
+```{r, echo = FALSE, message = FALSE}
+df <- df %>%  mutate(conf_sq = confirmed^2,
+                     conf_cb = confirmed^3,
+                     log_conf_sq = log_conf^2,
+                     log_conf_cb = log_conf^3)
+
+reg1 <- lm_robust(death ~ confirmed, data = df, se_type = "HC2")
+sum_1<- summary(reg1)
+
+reg2 <- lm_robust(death ~ confirmed + conf_sq, data = df, se_type = "HC2")
+sum_2 <- summary(reg2)
+
+reg3 <- lm_robust(death ~ confirmed + conf_sq + conf_cb, data = df, se_type = "HC2")
+sum_3 <- summary(reg3)
+
+
+reg4 <- lm_robust(log_death ~ log_conf, data = df, se_type = "HC2")
+sum_4 <- summary(reg4)
+
+reg5 <- lm_robust(log_death ~ log_conf + log_conf_sq, data = df, se_type = "HC2")
+sum_5 <- summary(reg5)
+
+
+reg6 <- lm_robust(log_death ~ log_conf + log_conf_sq + log_conf_cb, data = df, se_type = "HC2")
+sum_6 <- summary(reg6)
+
+
+cutoff <- 6
+# log transformation -> cutoff needs to be transformed as well
+cutoff_ln <- log( cutoff )
+# create regression: 
+reg7 <- lm_robust(log_death ~ lspline( log_conf , cutoff_ln ), data = df )
+sum_7 <- summary( reg7 )
+
+
+reg8 <- lm_robust(log_death ~ log_conf, data = df, weight = population)
+sum_8 <- summary(reg8)
+
+
+
+
+```
+![Regression Models](C:/Users/diama/Documents/CEU-BA-Assignments/Coding1_DataAnalysis2/Covid19-Regression/out/Regression_models.JPG)
+
+
+
+## Model choice
+ write the appropiate equation 
+ write: 2-3 sent, about interpretation
+
+ 
+ 
+## Hypothesis testing:
+
+H0: log_conf = 0
+HA: log_conf != 0
+
+```{r, echo = FALSE , warning = FALSE, message = FALSE }
+
+linearHypothesis( reg4 , "log_conf = 0")
+
+
+```
+
+## Analysis of residuals:
+
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE }
+# Get the predicted y values from the model
+df$reg4_y_pred <- reg4$fitted.values
+# Calculate the errors of the model
+df$reg4_res <- df$log_death - df$reg4_y_pred 
+
+# Find countries with largest negative errors
+res_df <- df %>% top_n( -5 , reg4_res ) %>% 
+  select( country , log_death , reg4_y_pred , reg4_res )
+
+# Find countries with largest positive errors
+res_df_2 <- df %>% top_n( 5 , reg4_res ) %>% 
+  select( country , log_death , reg4_y_pred , reg4_res )
+
+
+```
+Countries that relatively saved the most people due to COVID-19:
+
+```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE }
+kable(res_df)
+
+```
+Countries that relatively lost the most people due to COVID-19:
+
+```{r, echo = FALSE , results = "asis", warning = FALSE, message = FALSE }
+kable(res_df_2)
+
+```
+
+## Appendix:
+
+Chart 1: level - level linear regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+
+ggplot(df, aes(x = confirmed, y = death)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "confimred number of COVID-19 infecton", y = "number of death due to COVID-19")
+```
+
+
+Chart 2: level - log linear regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot(df, aes(x = confirmed, y = death)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "confimred number of COVID-19 infecton, ln scale", y = "number of death due to COVID-19") +
+  scale_x_continuous(trans = log_trans(), breaks = c(1, 100, 200, 500, 1000, 2000, 5000, 10000, 50000, 100000, 500000, 1000000))
+```
+
+Chart 3: log - level linear regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot(df, aes(x = confirmed, y = death)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "confimred number of COVID-19 infecton", y = "number of death due to COVID-19, ln scale") +
+  scale_y_continuous(trans = log_trans(), breaks = c(1, 100, 200, 500, 1000, 2000, 5000, 10000, 50000, 100000, 500000, 1000000))
+```
+
+Chart 4: log - log regression linear regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot(df, aes(x = confirmed, y = death)) +
+  geom_point() +
+  geom_smooth(method = "loess") +
+  labs(x = "confimred number of COVID-19 infecton, ln scale", y = "number of death due to COVID-19, ln scale") +
+  scale_x_continuous(trans = log_trans(), breaks = c(1, 100, 500, 2000, 5000, 20000, 50000, 150000, 750000, 2500000, 9000000)) +
+  scale_y_continuous(trans = log_trans(), breaks = c(1, 20, 100, 500, 4000, 20000, 100000, 750000))
+
+
+```
+
+Chart 5: level-level quadratic regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+
+ggplot(df, aes(x=conf_sq, y = death)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple")
+
+```
+
+Chart 6: level - level cubic regression
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot(df, aes( x = conf_cb, y = death)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple")
+
+```
+
+
+chart 7: log(death) - log(confirmed) quadratic regression
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot(df, aes(x = log_conf_sq, y = log_death)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "orange")
+
+```
+
+chart 8: log(death) - log(confirmed) cubic regression
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+
+ggplot(df, aes(x = log_conf_cb, y = log_death)) +
+  geom_point(color= "black") +
+  geom_smooth(method = lm, color = "orange")
+
+
+```
+
+chart 9: Piecewise linear spline regression
+
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+ggplot( data = df, aes( x = log_conf, y = log_death ) ) + 
+  geom_point( color="black") +
+  geom_smooth( formula = y ~ lspline(x,cutoff_ln) , method = lm , color = "orange" )
+
+```
+
+chart 10: Weighted linear regression, using population as weights
+
+```{r, echo = FALSE, warning = FALSE, message = FALSE, out.width = '50%'}
+
+ggplot(df, aes(x = log_conf, y = log_death)) +
+  geom_point(data = df, aes(size = population), color = "orange", shape = 16, alpha = 0.6, show.legend = F) +
+  geom_smooth(aes(weight = population), method = lm, color = "red")
+
+```
+
