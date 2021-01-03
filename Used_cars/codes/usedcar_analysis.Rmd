@@ -1,0 +1,584 @@
+---
+title: "Regression Analysis of Used Cars from Craiglist"
+author: "Eszter Diamant"
+date: '2021 01 03 '
+output: 
+  prettydoc::html_pretty:
+    theme: cayman
+    highlight: github
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+rm(list=ls())
+
+library(knitr)
+library(tidyverse)
+library(scales)
+library(lspline)
+library(estimatr)
+library(texreg)
+library(ggthemes)
+library(moments)
+library(readxl)
+library(rgl)
+library(xtable)
+library(huxtable)
+library(jtools)
+```
+
+## Introduction:
+
+The aim of this analysis to determine linear regression among price of used cars and their odometer reading and age. The main research question is how these descriptive variables affect the price of the vehicles while the main focus will be the causality behind the association of the variables. The first assumption is that the higher the odometer reading and older the car is, the worth of the vehicle will decrease. The selected dataset is originated from craiglist, a well-know website for selling and buying for everyone, focusing on the United state market.
+
+## Data:
+
+To begin with, the data is collected from craiglist, an American multinational e-commerce website where anybody can buy or sell anything in 570 cities from 70 countries. However, the data set only contains data on cars for sale in the United States.
+During the data exploration, it was found that the data set not only have used cars but also new ones realized on the market in 2020. It is a well-known practice for salons to sell those cars that were tried out by customers several times but for the analysis, there are considered as new cars. But, only the 2020 cars were removed as new ones but it might be that there are still this type of vehicles from the recent years. This can be considered as a measurement error, due to the fact that even if they are listed as used cars, they do not have a high values in odometer.
+
+```{r , echo = FALSE , results = "asis", warning = FALSE, message = FALSE, out.width = "35%", fig.align =  "center"}
+# load dataset from github account
+df <- read.csv("https://raw.githubusercontent.com/DiamantEszter97/Coding1-DA2-Assigments/master/Used_cars/data/clean/cars.csv")
+
+# because the loading of the data set is long, the table is saved into another table:
+cars_df <- df
+
+
+# calculate car ages:
+cars_df <- cars_df %>% mutate(age = (2020-year))
+
+# drop missing values of age:
+cars_df <- cars_df %>% drop_na(age)
+
+# drop minus values for age:
+cars_df <- cars_df %>%  filter(age > 0)
+
+
+
+
+```
+
+```{r , echo = FALSE , results = "asis", warning = FALSE, message = FALSE, include = TRUE}
+######################
+# create summary statistics
+
+# summary statistics of price
+pr <- cars_df %>% summarise(min = min(price),
+                            max = max(price),
+                            mean = round(mean(price), digit=2),
+                            median = median(price),
+                            sd = round(sd(price), digit=2),
+                            skew = round(skewness(price), digit=2),
+                            number_obs = nrow(cars_df))
+
+# summary statistics of odometer:
+od <- cars_df %>% summarise(min = min(odometer),
+                            max = max(odometer),
+                            mean = round(mean(odometer), digit=2),
+                            median = median(odometer),
+                            sd = round(sd(odometer), digit=2),
+                            skew = round(skewness(odometer), digit=2),
+                            number_obs = nrow(cars_df))
+
+# summary statistics of year:
+ag <- cars_df %>% summarise(min = min(age),
+                            max = max(age),
+                            mean = round(mean(age), digit=2),
+                            median = median(age),
+                            sd = round(sd(age), digit=2),
+                            skew = round(skewness(age), digit=2),
+                            number_obs = nrow(cars_df))
+# create full summary table:
+cars_summary <- rbind(od, pr, ag)
+
+# naming the rows:
+rownames(cars_summary) <- c("Odometer", "Price", "Age")
+
+# remove table pr, ag, and od:
+remove(od, pr, ag)
+
+xtb <- xtable(cars_summary, type = latex, caption = "Summary statistics of price, odometer reading, and age of cars before cleaning")
+print(xtb, comment = FALSE, include.rownames= TRUE)
+```
+
+
+```{r, echo = FALSE}
+kable(xtb, comment = FALSE, include.rownames= TRUE)
+```
+As you can see in the above summary statistics, there are some extreme values that also can be stated as a real classical measurement errors ecause it is more likely an error in the data collection process. For this reason, where the odometer reading did not exceed 70000 miles but was over 1000000miles (that is still a huge number) were dropped from the dataset. By this, it might be stated that these try-out cars were removed from the analysis. On the other hand, hose cars that had lower price than 500 dollars and more than 60000 dollars were also dropped due to the assumption that they are wreckage or a new car. In this regard, they can be called as extreme values that are not needed for the analysis.
+In the end, as another example for potential measurement error is the value assessment of the used cars by the advertisers. People tend to overestimate the value of the used vehicles and ask for higher price that they really worth. This may influence the outcome and punctuality of the regression model and its coefficients later on. 
+
+After the cleaning the summary statistics change in the following way:
+
+```{r, echo = FALSE, warning = FALSE, message= FALSE}
+####################
+# check for extreme values for lower values:
+extr_low_pr_df <- cars_df %>% filter(price <= 500)
+extr_low_od_df <- cars_df %>% filter(odometer <= 70000)
+
+# check for extremes values on higher values:
+extr_high_pr_df <- cars_df %>% filter(price >= 60000)
+extr_high_od_df <- cars_df %>% filter(odometer >= 1000000)
+
+
+# conclusion: there are cases when prices and odometer measures equal to 1
+#             there are cases where prices are lower than 500 and their odometer 
+#               not high to explain, also they are no more than 10 years old
+#             there are cases where the usage is not more than 70000. 
+#               They are considered as new cars
+#             there are cases where the prices are too high, even exceeds the market price of the car
+#             there are cases where the odometer is too high with high prices
+
+# drop observations where price is lower than 500 and odometer reading is lower than 400 and which are made in 2020:
+cars_df <- cars_df %>% filter(price >= 500, price <= 60000, odometer >= 70000, odometer <= 1000000, year < 2020)
+
+
+# delete
+# remove tables ext_low_pr_df, ext_low_od_df, extr_high_pr_df, and extr_high_od_df
+rm(extr_low_pr_df, extr_low_od_df, extr_high_pr_df, extr_high_od_df)
+
+
+
+```
+
+```{r, echo = FALSE}
+######################
+# create summary statistics
+
+# summary statistics of price
+pr <- cars_df %>% summarise(min = min(price),
+                            max = max(price),
+                            mean = round(mean(price), digit=2),
+                            median = median(price),
+                            sd = round(sd(price), digit=2),
+                            skew = round(skewness(price), digit=2),
+                            number_obs = nrow(cars_df))
+
+# summary statistics of odometer:
+od <- cars_df %>% summarise(min = min(odometer),
+                            max = max(odometer),
+                            mean = round(mean(odometer), digit=2),
+                            median = median(odometer),
+                            sd = round(sd(odometer), digit=2),
+                            skew = round(skewness(odometer), digit=2),
+                            number_obs = nrow(cars_df))
+
+# summary statistics of year:
+ag <- cars_df %>% summarise(min = min(age),
+                            max = max(age),
+                            mean = round(mean(age), digit=2),
+                            median = median(age),
+                            sd = round(sd(age), digit=2),
+                            skew = round(skewness(age), digit=2),
+                            number_obs = nrow(cars_df))
+# create full summary table:
+cars_summary <- rbind(od, pr, ag)
+
+# naming the rows:
+rownames(cars_summary) <- c("Odometer", "Price", "Age")
+
+# remove table pr, ag, and od:
+remove(od, pr, ag)
+
+xtb <- xtable(cars_summary, type = latex, caption = "Summary statistics of price, odometer reading, and age of cars after cleaning")
+```
+
+
+```{r, echo = FALSE}
+kable(xtb, comment = FALSE, include.rownames= TRUE)
+```
+
+## Regression Analysis:
+
+### 1) Exploration:
+
+When I have started the analysis, I only wanted to compare the prices of cars to their odometer reading. But, as you can see from the appendix figures from 1 to 2, there is a huge spread in the explanatory and dependent variables. Therefore, before the real regression analysis, the omitted variables must be noted: only including the odometer readings as the main explanatory variable might result in serious errors in the outcome. People not only check the odometer reading but also the quality, the age, the model, etc. of the car. So, beside the simple linear regression, a multiple regression that focuses on the odometer readings and the age of cars was also required for carrying out the analysis properly. Although, the problem of omitted variables still exists such as the quality of the vehicles, or the models.
+On the other, as you can see in the same charts, a pattern tends to appear in the change of prices: after a certain amount of time, the price starts to raise after a stable decreasing pattern. It can be explained that after a time, cars became so called retro and if they are still working, their worth will increase. By this, the regression models are also investigating this phenomenon.
+
+### 2) Log Transformation:
+
+After exploration of the variables, the log price and level age and odometer reading are suggested to use. Even if the interpretations of the models are more complex, for carrying out a multiply regression, the dependent variable need to be the same. The log price seemed to be working better for both cases at the same time. In details, log transformation helps to decrease the high variety in the variables. Usually, the high skeweness is a sign for need for log transformation, although, the odometer had the highest while the price the lowest. As a result, the price will be ß multiplied by 100% higher or lower (depending on the regression) by one unit increase in x variable.
+
+### 3) Regression Models:
+
+Based on the above stated assumption, eight models were created mostly for comparing purposes. Firstly, the simple linear regressions were made on both price-odometer and price-age. After that, each regression was made piecewise linear spline, 250.000 miles for odometer reading, 25 for age. Also, for checking for polynomials, they were investigated as quadratic regression. And, as the focus the analysis, a multiple regression is made where the explanatory variables are the age and odometer reading. in the end, a weighted regression was also carried out.
+
+Log(Price) - Odometer Reading:
+
+  ln(price) = $\alpha$ + ß * odometer
+
+  ln(price) = $\alpha$ + ß$_{1}$ * odometer(odometer < 250000) + ß$_{2}$ * odometer(odometer <= 250000)
+
+  ln(price) = $\alpha$ + ß$_{1}$ * odometer + ß$_{2}$ * odometer$^{2}$
+
+Log(Price) - Age:
+
+  ln(price) = $\alpha$ + ß * age
+
+  ln(price) = $\alpha$ + ß$_{1}$ * age(age < 25) + ß$_{2}$ * age(age <= 25)
+
+  ln(price) = $\alpha$ + ß$_{1}$ * age + ß$_{2}$ * age$^{2}$
+
+Log(Price) - Age - Odometer:
+
+  ln(price) = $\alpha$ + ß$_{1}$ * age + ß$_{2}$ * odometer
+
+### 4) Outcomes:
+
+As you can see in the appendix, the outcomes show a low association among the variables. It might be due to some errors but the p-values re lower than 0,1% that is significantly lower than the 5%, the level of significance. However, it comes back the previously stated problems: the spread among dependent variables is high therefore the fitness of the model low. The R-square seem to prove the same assumption by not exceeding than 0,34 in case of piecewise spline regression between log price and age. Another note is the high residuals that exceeds 22.000 in each regression. The second highest R-squared can be found in the quadratic regression with age as the explanatory variable. Based on this, the piecewise linear regression between price and age or the quadratic regression might be the most fitting, but they exclude the important issue of the omitted variable: the odometer reading. Therefore, the multiple regression model would be the best choice to find the causality behind the prices even if the fitness is not that high but still exceeds the others.
+
+## Causality:
+The main research question is the causality behind the prices of used cars based on their age and odometer reading. As it was stated before, the pattern seems to show that as the odometer reading, and age grow until 250.000 and 25 respectively the price tends to decrease. But, due to the spread of dependent variable, the regression can be considered weak. The reason behind it also can be found in the previously stated omitted variables such as the model and quality of the cars. Therefore, I have made a simple hypothesis testing between two car models: Ford and Toyota in which I assume that there are no difference between the two model prices:
+
+```{r, echo = FALSE}
+# Hypothesis test:
+# create the tables:
+ford <- cars_df %>% filter(manufacturer == "ford")
+nissan <- cars_df %>% filter(manufacturer == "nissan")
+
+
+# do hypothesis test:
+test <- t.test(ford$price, nissan$price, var.equal = F)
+
+# create hypothesis table:
+table <- data.frame(test = "Ford Vs. Nissan",
+                            t = test$statistic[[1]],
+                            p_value = "< 0.01",
+                            CI_95_lower = test$conf.int[1],
+                            CI_95_upper = test$conf.int[2])
+# make it work in rmd
+kable(table)
+```
+
+Based on the hypothesis test, the null can be rejected that the prices do not differ from each other considering the high t-statistics that exceed 2 and the low p-value that is lower than the significance level.
+
+In the analysis, there might be bad controls that must be dropped. Considering that customers do choose on the usage and age of the car that influences the prices as the regression showed, they need to be put in the model. However, as a bad control can be found in the appearance of the vehicle. For example, a car that relatively in good condition regarding its working but has a serious surface damages will influence the willingness of pay for the cars. Unfortunately, the sellers do not like to state in the advertisement this issue that makes the elimination harder.
+
+## External validity:
+
+As the analysis tries to find a general pattern behind the used car market, the external validity has importance in the discussion. Because the size of the dataset and the origin, it can be stated that regression pattern can be applied to the real world. However, the United Sates is among the rich countries where the cars are expected to have better quality and better condition It might be that the findings cannot be applied in countries where people earn less, and the type of cars do not match to the current 
+
+## Robustness Check:
+
+In order to make sure that the regression is representative, a robustness check was carried out with only one to five ratios. The results in the appendix figure 5 presents that the outcomes do not differ significantly or not at all. 
+
+## Summary:
+
+The main research question was how the usage measured in odometer reading and the age influences the price of used cars. For identify the pattern in the associations,  regression analysis was carried out in which both correlation were check individually, and in multiple regression. It was found that for a certain amount of time prices decrease that was determined as 25 years, the value start to increase due to the fashion of "retro" cars. However, the pattern found in the regression can be considered weak because of the high spread of prices. It was stated that the reason behind that is probably the car models and their real worth in quality. The hypothesis testing also presented the same. The robustness check also illustrated that changing the parameters do not change the outcome significantly, although, the findings might not be applied in poor countries where the earnings are lower. As a final word, if there is a need for more punctual analysis, it would be suggested to carry out an analysis in which different car models are investigated for until a certain age.
+
+## Appendix:
+Figure 1: Exploration of model visualization: Price - Odometer
+```{r, echo = FALSE, warning = FALSE, message= FALSE, out.width = "50%"}
+# check for basic scatterplots for identify the best model fit for price and odometer reading:
+# price = ß + L*odometer
+
+# level - level:
+ggplot(cars_df, aes(x = odometer, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(breaks = c(1, 70000, 100000, 300000, 500000, 800000, 1000000)) +
+  labs(x = "Odometer Reading", y = " Price of Car") +
+  ggtitle("Level Price - Level Odometer") 
+
+# level - log:
+ggplot(cars_df, aes(x = odometer, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(trans = log_trans(), breaks = c(1, 70000, 100000, 300000, 500000, 800000, 1000000))+
+  labs(x = "Odometer Reading", y = " Price of Car")+
+  ggtitle("Level Price - Log Odometer") 
+
+# log - level:
+ggplot(cars_df, aes(x = odometer, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_y_continuous(trans = log_trans()) +
+  scale_x_continuous(breaks = c(1, 70000, 100000, 300000, 500000, 800000, 1000000))+
+  labs(x = "Odometer Reading", y = " Price of Car")+
+  ggtitle("Log Price - Level Odometer") 
+
+# log -log:
+ggplot(cars_df, aes(x = odometer, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(trans = log_trans(), breaks = c(1, 70000, 100000, 300000, 500000, 800000, 1000000)) +
+  scale_y_continuous(trans = log_trans())+
+  labs(x = "Odometer Reading", y = " Price of Car")+
+  ggtitle("Log Price - Log Odometer") 
+
+
+```
+
+Figure 2: Exploration of model visualization: Price - Age
+
+```{r, echo = FALSE, warning = FALSE, message= FALSE, out.width = "50%"}
+# model check for age and price:
+# # price = ß + L*age
+
+# level - level:
+ggplot(cars_df, aes(x = age, y = price)) +
+  geom_point() +
+  geom_smooth()+
+  labs(x = "Age of car", y = " Price of Car")+
+  ggtitle("Level Price - Level Age") 
+
+# level - log:
+ggplot(cars_df, aes(x = age, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(trans = log_trans())+
+  labs(x = "Age of car", y = " Price of Car")+
+  ggtitle("Level Price - Log Age")
+
+# log - level:
+ggplot(cars_df, aes(x = age, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_y_continuous(trans = log_trans())+
+  labs(x = "Age of car", y = " Price of Car")+
+  ggtitle("Log Price - Level Age")
+
+# log -log:
+ggplot(cars_df, aes(x = age, y = price)) +
+  geom_point() +
+  geom_smooth() +
+  scale_x_continuous(trans = log_trans()) +
+  scale_y_continuous(trans = log_trans())+
+  labs(x = "Age of car", y = " Price of Car") +
+  ggtitle("Log Price - Log Age")
+```
+
+Figure 3: Regression Models:
+```{r, echo = FALSE, warning = FALSE, message= FALSE}
+# create log transformed price:
+cars_df <- cars_df %>% mutate(log_pr = log(price),
+                              od_sq = odometer^2,
+                              age_sq = age^2)
+
+# create regressions:
+# price - odometer
+# reg1:
+reg1 <- lm_robust(log_pr ~ odometer, data = cars_df, se_type = "HC2")
+
+# Spline
+# reg2:
+cutoff <- 250000
+
+# create regression: 
+reg2 <- lm_robust(log_pr ~ lspline( odometer , cutoff ), data = cars_df )
+
+
+# price - age:
+# reg3:
+reg3 <- lm_robust(log_pr ~ age, data = cars_df, se_type = "HC2")
+
+# Spline
+# reg4:
+cutoff2 <- 25
+
+# create regression: 
+reg4 <- lm_robust(log_pr ~ lspline( age , cutoff2 ), data = cars_df )
+
+
+# price - odometer - age:
+# reg5:
+reg5 <- lm_robust(log_pr ~ odometer + age, data = cars_df, se_type = "HC2")
+
+
+# Weighted:
+# reg6:
+reg6 <- lm_robust(log_pr ~ odometer, data = cars_df, weight = age)
+
+# Quadratic:
+# reg7:
+reg7 <- lm_robust(log_pr ~ odometer + od_sq, data = cars_df, se_type = "HC2")
+
+# reg8:
+reg8 <- lm_robust(log_pr ~ age + age_sq, data = cars_df, se_type = "HC2")
+
+```
+
+```{r, echo = FALSE}
+exptbl <- export_summs(reg1, reg2, reg3, reg4, 
+                       model.names = c("Log Price/odometer-lin", "Log Price/odometer-split",
+                               "Log Price/age-lin", "Log Price/age-split"))
+exptbl_2 <- export_summs(reg5, reg6, reg7, reg8,
+                         model.names = c("Ln(Price)/odometer/age-lin", "Ln(Price)/odometer-W.lin",
+                               "Ln(Price)/odometer-quad", "Ln(Price)/age-quad"))
+as_hux(exptbl)
+as_hux(exptbl_2)
+```
+
+Figure 4: Visualization of Regression Models:
+```{r, echo = FALSE, warning = FALSE, message= FALSE, out.width = "50%"}
+# Reg1
+ggplot(cars_df, aes(x = odometer, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple") +
+  labs(x = "Odoemeter reading in miles",  y = "Log price of car")+
+  ggtitle("Log Price - Age: Linear")
+
+# Reg2:
+ggplot( data = cars_df, aes( x = odometer, y = log_pr ) ) + 
+  geom_point( color="black") +
+  geom_smooth( formula = y ~ lspline(x,cutoff) , method = lm , color = "purple" ) +
+  labs(x = "Odoemeter reading in miles",  y = "Log price of car") +
+  ggtitle("Log Price - Age: Piecewise Spline Linear")
+
+# Reg3:
+ggplot(cars_df, aes(x = age, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple") +
+  labs(x = "Age of car",  y = "Log price of car") +
+  ggtitle("Log Price - Odometer: Linear")
+
+# Reg4:
+ggplot( data = cars_df, aes( x = age, y = log_pr ) ) + 
+  geom_point( color="black") +
+  geom_smooth( formula = y ~ lspline(x,cutoff) , method = lm , color = "purple" ) +
+  labs(x = "Age of car",  y = "Log price of car") +
+  ggtitle("Log Price - Odometer: Spiecewise Spline Linear")
+
+# Reg5:
+
+
+# Reg6:
+ggplot(cars_df, aes(x = odometer, y = log_pr)) +
+  geom_point(data = cars_df, aes(size = age), color = "black", shape = 16, alpha = 0.6, show.legend = F) +
+  geom_smooth(aes(weight = age), method = lm, color = "purple") +
+  ggtitle("Log Price - Odometer: Weighted on Age")
+
+# Reg7:
+ggplot(cars_df, aes(x = od_sq, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple") +
+  labs(x = "Age of car",  y = "Log price of car")+
+  ggtitle("Log Price - Odometer: Quadratic")
+
+# Reg8:
+ggplot(cars_df, aes(x = age_sq, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "purple") +
+  labs(x = "Age of car",  y = "Log price of car")+
+  ggtitle("Log Price - Age: Quadratic")
+
+```
+
+Figure 5: Robustness Check:
+```{r, echo = FALSE, warning = FALSE, message= FALSE}
+######################################################
+# Robustness check:
+# make a sample of 1/5 of full cars_df
+sample_df <- sample_n(cars_df, 44694)
+
+# testing:
+treg1 <- lm_robust(log_pr ~ odometer, data = sample_df, se_type = "HC2")
+
+# Spline
+# reg2:
+cutoff <- 250000
+
+# create regression: 
+treg2 <- lm_robust(log_pr ~ lspline( odometer , cutoff ), data = sample_df )
+
+# price - age:
+# reg3:
+treg3 <- lm_robust(log_pr ~ age, data = sample_df, se_type = "HC2")
+
+# Spline
+# reg4:
+cutoff2 <- 25
+
+# create regression: 
+treg4 <- lm_robust(log_pr ~ lspline( age , cutoff2 ), data = sample_df )
+
+# price - odometer - age:
+# reg5:
+treg5 <- lm_robust(log_pr ~ odometer + age, data = sample_df, se_type = "HC2")
+
+# Weighted:
+# reg6:
+treg6 <- lm_robust(log_pr ~ odometer, data = sample_df, weight = age)
+
+# Quadratics:
+# reg7:
+treg7 <- lm_robust(log_pr ~ odometer + od_sq, data = sample_df, se_type = "HC2")
+
+# reg8:
+treg8 <- lm_robust(log_pr ~ age + age_sq, data = sample_df, se_type = "HC2")
+
+```
+
+
+```{r, echo = FALSE}
+texptbl <- export_summs(treg1, treg2, treg3, treg4, 
+                       model.names = c("Log Price/odometer-lin", "Log Price/odometer-split",
+                               "Log Price/age-lin", "Log Price/age-split"))
+texptbl_2 <- export_summs(treg5, treg6, treg7, treg8,
+                         model.names = c("Ln(Price)/odometer/age-lin", "Ln(Price)/odometer-W.lin",
+                               "Ln(Price)/odometer-quad", "Ln(Price)/age-quad"))
+as_hux(texptbl)
+as_hux(texptbl_2)
+```
+
+
+Figure 6: Visualization for Robustness check:
+```{r, echo = FALSE, warning = FALSE, message= FALSE, out.width = "50%"}
+# Reg1
+ggplot(sample_df, aes(x = odometer, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "green") +
+  labs(x = "Odoemeter reading in miles",  y = "Log price of car")+
+  ggtitle("Log Price - Age: Linear")
+
+# Reg2:
+ggplot( data = sample_df, aes( x = odometer, y = log_pr ) ) + 
+  geom_point( color="black") +
+  geom_smooth( formula = y ~ lspline(x,cutoff) , method = lm , color = "green" ) +
+  labs(x = "Odoemeter reading in miles",  y = "Log price of car") +
+  ggtitle("Log Price - Age: Piecewise Spline Linear")
+
+# Reg3:
+ggplot(sample_df, aes(x = age, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "green") +
+  labs(x = "Age of car",  y = "Log price of car") +
+  ggtitle("Log Price - Odometer: Linear")
+
+# Reg4:
+ggplot( data = sample_df, aes( x = age, y = log_pr ) ) + 
+  geom_point( color="black") +
+  geom_smooth( formula = y ~ lspline(x,cutoff) , method = lm , color = "green" ) +
+  labs(x = "Age of car",  y = "Log price of car") +
+  ggtitle("Log Price - Odometer: Spiecewise Spline Linear")
+
+# Reg5:
+
+
+# Reg6:
+ggplot(sample_df, aes(x = odometer, y = log_pr)) +
+  geom_point(data = sample_df, aes(size = age), color = "black", shape = 16, alpha = 0.6, show.legend = F) +
+  geom_smooth(aes(weight = age), method = lm, color = "green") +
+  ggtitle("Log Price - Odometer: Weighted on Age")
+
+# Reg7:
+ggplot(sample_df, aes(x = od_sq, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "green") +
+  labs(x = "Age of car",  y = "Log price of car")+
+  ggtitle("Log Price - Odometer: Quadratic")
+
+# Reg8:
+ggplot(sample_df, aes(x = age_sq, y = log_pr)) +
+  geom_point(color = "black") +
+  geom_smooth(method = lm, color = "green") +
+  labs(x = "Age of car",  y = "Log price of car")+
+  ggtitle("Log Price - Age: Quadratic")
+
+```
+
+## Github repository:
+[Github](https://github.com/DiamantEszter97/Coding1-DA-Assigment1/tree/master/Used_cars)
+
+
